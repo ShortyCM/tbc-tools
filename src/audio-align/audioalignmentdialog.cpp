@@ -28,6 +28,7 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QSaveFile>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QThread>
 
@@ -85,6 +86,22 @@ AudioAlignmentDialog::AudioAlignmentDialog(QWidget *parent) :
     }
     if (ui->loadTracksForExportLabel) {
         ui->loadTracksForExportLabel->setToolTip(loadTracksForExportTooltip);
+    }
+    const QString exportTrackOrderTooltip = tr(
+        "When both aligned tracks are loaded into Export, make HiFi-Decode audio track 1 "
+        "and Baseband audio track 2. This preference is remembered.");
+    if (ui->preferHifiExportTrackCheckBox) {
+        QSettings settings;
+        ui->preferHifiExportTrackCheckBox->setChecked(
+            settings.value(QStringLiteral("audioAlignment/preferHifiExportTrack"), false).toBool());
+        ui->preferHifiExportTrackCheckBox->setToolTip(exportTrackOrderTooltip);
+        connect(ui->preferHifiExportTrackCheckBox, &QCheckBox::toggled, this, [](bool checked) {
+            QSettings settings;
+            settings.setValue(QStringLiteral("audioAlignment/preferHifiExportTrack"), checked);
+        });
+    }
+    if (ui->exportTrackOrderLabel) {
+        ui->exportTrackOrderLabel->setToolTip(exportTrackOrderTooltip);
     }
     const QString convertMonoTooltip = tr(
         "When the Linear/Baseband input is a mono (1-channel) file, up-mix it to "
@@ -172,6 +189,7 @@ void AudioAlignmentDialog::setAlignmentUiBusy(bool busy)
     setWidgetEnabled(ui->rfVideoSampleRateCustomSpinBox);
     setWidgetEnabled(ui->overwriteCheckBox);
     setWidgetEnabled(ui->loadTracksForExportCheckBox);
+    setWidgetEnabled(ui->preferHifiExportTrackCheckBox);
     setWidgetEnabled(ui->convertMonoToStereoCheckBox);
 
     if (ui->alignButton) {
@@ -356,13 +374,26 @@ void AudioAlignmentDialog::finishAlignmentRun(const AlignmentRunResult &result)
     if (shouldPrepareExportTracks) {
         QStringList preparedTrackFiles;
         QStringList preparedTrackNames;
-        if (result.linearAligned && !result.linearOutputFile.trimmed().isEmpty()) {
-            preparedTrackFiles << result.linearOutputFile;
-            preparedTrackNames << tr("Baseband");
-        }
-        if (result.hifiAligned && !result.hifiOutputFile.trimmed().isEmpty()) {
-            preparedTrackFiles << result.hifiOutputFile;
-            preparedTrackNames << tr("HiFi-Decode");
+        const bool preferHifi = ui->preferHifiExportTrackCheckBox
+                                && ui->preferHifiExportTrackCheckBox->isChecked();
+        auto appendLinearTrack = [&]() {
+            if (result.linearAligned && !result.linearOutputFile.trimmed().isEmpty()) {
+                preparedTrackFiles << result.linearOutputFile;
+                preparedTrackNames << tr("Baseband");
+            }
+        };
+        auto appendHifiTrack = [&]() {
+            if (result.hifiAligned && !result.hifiOutputFile.trimmed().isEmpty()) {
+                preparedTrackFiles << result.hifiOutputFile;
+                preparedTrackNames << tr("HiFi-Decode");
+            }
+        };
+        if (preferHifi) {
+            appendHifiTrack();
+            appendLinearTrack();
+        } else {
+            appendLinearTrack();
+            appendHifiTrack();
         }
         if (!preparedTrackFiles.isEmpty()) {
             emit exportTracksPrepared(preparedTrackFiles, preparedTrackNames);
@@ -948,14 +979,15 @@ bool AudioAlignmentDialog::writeExportTrackPayload(const QString &linearOutputFi
         tracks.append(trackObject);
     };
 
-    appendTrack(includeLinearTrack,
-                linearOutputFile,
-                QStringLiteral("linear"),
-                tr("Baseband"));
-    appendTrack(includeHifiTrack,
-                hifiOutputFile,
-                QStringLiteral("hifi"),
-                tr("HiFi-Decode"));
+    const bool preferHifi = ui->preferHifiExportTrackCheckBox
+                            && ui->preferHifiExportTrackCheckBox->isChecked();
+    if (preferHifi) {
+        appendTrack(includeHifiTrack, hifiOutputFile, QStringLiteral("hifi"), tr("HiFi-Decode"));
+        appendTrack(includeLinearTrack, linearOutputFile, QStringLiteral("linear"), tr("Baseband"));
+    } else {
+        appendTrack(includeLinearTrack, linearOutputFile, QStringLiteral("linear"), tr("Baseband"));
+        appendTrack(includeHifiTrack, hifiOutputFile, QStringLiteral("hifi"), tr("HiFi-Decode"));
+    }
 
     if (tracks.isEmpty()) {
         QFile::remove(payloadPath);

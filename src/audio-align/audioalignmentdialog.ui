@@ -277,13 +277,27 @@
       </widget>
      </item>
      <item row="9" column="0">
+      <widget class="QLabel" name="exportTrackOrderLabel">
+       <property name="text">
+        <string>Export Track Order</string>
+       </property>
+      </widget>
+     </item>
+     <item row="9" column="1">
+      <widget class="QCheckBox" name="preferHifiExportTrackCheckBox">
+       <property name="text">
+        <string>Put HiFi-Decode first</string>
+       </property>
+      </widget>
+     </item>
+     <item row="10" column="0">
       <widget class="QLabel" name="monoConversionLabel">
        <property name="text">
         <string>Mono Conversion</string>
        </property>
       </widget>
      </item>
-     <item row="9" column="1">
+     <item row="10" column="1">
       <widget class="QCheckBox" name="convertMonoToStereoCheckBox">
        <property name="text">
         <string>Convert mono to stereo (linear/baseband)</string>
